@@ -37,9 +37,24 @@ button{font-family:var(--font);cursor:pointer}input,select{font-family:var(--fon
 .btn-g{background:var(--g);color:#111;border-color:var(--g)}.btn-g:hover{opacity:.85;border-color:var(--g)}
 
 /* tabs */
-.tabs{display:flex;gap:2px;background:var(--s1);border:1px solid var(--b1);border-radius:var(--rad);padding:3px;margin-bottom:14px}
-.tab{flex:1;padding:7px 0;border:none;background:0;border-radius:6px;font-family:var(--mono);font-weight:600;font-size:.66rem;color:var(--t3);transition:all .12s;text-transform:uppercase;letter-spacing:.5px}
+.tabs{display:flex;gap:2px;background:var(--s1);border:1px solid var(--b1);border-radius:var(--rad);padding:3px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab{flex:0 0 auto;padding:7px 10px;border:none;background:0;border-radius:6px;font-family:var(--mono);font-weight:600;font-size:.66rem;color:var(--t3);transition:all .12s;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
 .tab.on{background:var(--s2);color:var(--t1)}
+
+/* inbox */
+.inbox-input{display:flex;gap:6px;margin-bottom:14px}
+.inbox-input .fi{flex:1}
+.inbox-add{width:40px;height:40px;border-radius:var(--rad);border:1px solid var(--g);background:var(--gd);color:var(--g);font-size:1.2rem;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .1s;flex-shrink:0}
+.inbox-add:hover{background:var(--g);color:#111}
+.todo-it{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;background:var(--s1);border:1px solid var(--b1);border-radius:var(--rad);margin-bottom:4px;transition:all .12s}
+.todo-it.todo-dn{opacity:.35}
+.todo-it.todo-dn .todo-text{text-decoration:line-through}
+.todo-text{flex:1;font-size:.84rem;font-weight:500;line-height:1.4;min-width:0}
+.todo-due{font-family:var(--mono);font-size:.55rem;color:var(--t3);margin-top:3px}
+.todo-due.overdue{color:var(--r)}
+.todo-meta{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:3px}
+.clear-done{font-family:var(--mono);font-size:.6rem;color:var(--t3);background:0;border:1px solid var(--b1);border-radius:var(--rad);padding:5px 10px;cursor:pointer;transition:all .1s;margin-top:8px}
+.clear-done:hover{border-color:var(--r);color:var(--r)}
 
 /* progress */
 .prog-wrap{margin-bottom:14px}
@@ -82,6 +97,13 @@ button{font-family:var(--font);cursor:pointer}input,select{font-family:var(--fon
 .skip-btn:hover{border-color:var(--o);color:var(--o)}
 .skip-btn.on{background:var(--o);color:#111;border-color:var(--o)}
 .rate-pct{font-family:var(--mono);font-size:.55rem;color:var(--t3);margin-left:auto;white-space:nowrap}
+
+/* period */
+.period-bar{display:flex;gap:4px;margin-bottom:12px}
+.period-chip{font-family:var(--mono);font-size:.6rem;padding:4px 10px;border-radius:16px;border:1px solid var(--b1);background:0;color:var(--t3);cursor:pointer;transition:all .12s;display:flex;align-items:center;gap:3px}
+.period-chip.on{border-color:var(--g);color:var(--g);background:var(--gd)}
+.period-icon{font-size:.7rem}
+.period-badge{font-size:.6rem;margin-right:2px}
 
 /* git heatmap */
 .hw{background:var(--s1);border:1px solid var(--b1);border-radius:var(--rad);padding:16px;overflow-x:auto;margin-bottom:12px}
@@ -242,9 +264,9 @@ function initFB(){
     dbRef.on('value',snap=>{
       const d=snap.val();
       if(d){
-        // Merge keeping backward compat
         if(d.items) S.data.items=d.items.map(i=>({...i,checks:i.checks||[]}));
         if(d.tagColors) S.data.tagColors=d.tagColors;
+        if(d.todos) S.data.todos=d.todos;
         setL(S.data);R();
       }
     });
@@ -266,7 +288,7 @@ function push(d){
 // ═══════════════════════════════════════════════════════════
 // LOCAL STORAGE
 // ═══════════════════════════════════════════════════════════
-const getL=()=>{try{const d=JSON.parse(localStorage.getItem(LK));return d&&d.items?d:{items:[],tagColors:{}}}catch{return{items:[],tagColors:{}}}};
+const getL=()=>{try{const d=JSON.parse(localStorage.getItem(LK));return d&&d.items?{...d,todos:d.todos||[]}:{items:[],tagColors:{},todos:[]}}catch{return{items:[],tagColors:{},todos:[]}}};
 const setL=d=>localStorage.setItem(LK,JSON.stringify(d));
 
 // ═══════════════════════════════════════════════════════════
@@ -387,7 +409,7 @@ function requestNotifPerm(){
 // ═══════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════
-let S={data:{items:[],tagColors:{}},view:'today',modal:null,edit:null,tagF:null,heatItem:'all',weekOff:0,monthOff:0};
+let S={data:{items:[],tagColors:{},todos:[]},view:'today',modal:null,edit:null,tagF:null,periodF:null,heatItem:'all',weekOff:0,monthOff:0};
 
 // ═══════════════════════════════════════════════════════════
 // RENDER
@@ -411,6 +433,7 @@ function R(){
   <div class="hdr-r"><button class="btn-s" onclick="csv()">csv ↓</button><button class="btn-s btn-g" onclick="oA()">+ novo</button></div></div>
   <div class="tabs">
     <button class="tab ${S.view==='today'?'on':''}" onclick="V('today')">hoje</button>
+    <button class="tab ${S.view==='inbox'?'on':''}" onclick="V('inbox')">inbox</button>
     <button class="tab ${S.view==='week'?'on':''}" onclick="V('week')">semana</button>
     <button class="tab ${S.view==='month'?'on':''}" onclick="V('month')">mês</button>
     <button class="tab ${S.view==='heat'?'on':''}" onclick="V('heat')">heatmap</button>
@@ -425,6 +448,7 @@ function R(){
   }
 
   if(S.view==='today')h+=rToday(t,sorted);
+  else if(S.view==='inbox')h+=rInbox();
   else if(S.view==='week')h+=rWeek(t,sorted);
   else if(S.view==='month')h+=rMonth(t,sorted);
   else if(S.view==='heat')h+=rHeat(sorted);
@@ -442,22 +466,78 @@ function rToday(t,items){
   const due=items.filter(i=>isDue(i,t));
   if(!due.length)return`<div class="empty"><p>Dia livre — nada agendado 🎉</p></div>`;
 
-  const skipped=due.filter(i=>i.skips?.includes(t));
-  const pen=due.filter(i=>!i.checks?.includes(t)&&!i.skips?.includes(t));
-  const don=due.filter(i=>i.checks?.includes(t));
-  const total=due.length-skipped.length;
+  // Period filter
+  const periods=[
+    {k:null,lbl:'tudo',icon:''},
+    {k:'morning',lbl:'manhã',icon:'☀'},
+    {k:'afternoon',lbl:'tarde',icon:'⛅'},
+    {k:'evening',lbl:'noite',icon:'🌙'},
+    {k:'anytime',lbl:'qualquer',icon:'∞'},
+  ];
+  const pf=S.periodF;
+  const filtered=pf?due.filter(i=>(i.period||'anytime')===pf):due;
+
+  const skipped=filtered.filter(i=>i.skips?.includes(t));
+  const pen=filtered.filter(i=>!i.checks?.includes(t)&&!i.skips?.includes(t));
+  const don=filtered.filter(i=>i.checks?.includes(t));
+  const total=filtered.length-skipped.length;
   const pct=total?Math.round(don.length/total*100):0;
 
-  let h=`<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:${pct}%"></div></div><div class="prog-lbl">${don.length}/${total} · ${pct}%${skipped.length?` · ${skipped.length} pulado`:''}</div></div>`;
+  let h=`<div class="period-bar">`;
+  periods.forEach(p=>{
+    const count=p.k?due.filter(i=>(i.period||'anytime')===p.k).length:due.length;
+    if(p.k&&count===0)return;
+    h+=`<button class="period-chip ${pf===p.k?'on':''}" onclick="PF(${p.k?`'${p.k}'`:'null'})">${p.icon?`<span class="period-icon">${p.icon}</span>`:''}${p.lbl}</button>`;
+  });
+  h+=`</div>`;
 
-  if(pen.length){
-    h+=`<div class="slbl">pendente · ${pen.length}</div>`;
-    pen.forEach(i=>{h+=iHTML(i,t,false)});
+  h+=`<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:${pct}%"></div></div><div class="prog-lbl">${don.length}/${total} · ${pct}%${skipped.length?` · ${skipped.length} pulado`:''}</div></div>`;
+
+  // Group by period when not filtering
+  if(!pf){
+    const groups=[
+      {k:'morning',lbl:'☀ manhã',items:[]},
+      {k:'afternoon',lbl:'⛅ tarde',items:[]},
+      {k:'evening',lbl:'🌙 noite',items:[]},
+      {k:'anytime',lbl:'qualquer hora',items:[]},
+    ];
+    pen.forEach(i=>{const g=groups.find(g=>g.k===(i.period||'anytime'));if(g)g.items.push(i)});
+
+    const hasMultiple=groups.filter(g=>g.items.length).length>1;
+
+    groups.forEach(g=>{
+      if(!g.items.length)return;
+      if(hasMultiple)h+=`<div class="slbl">${g.lbl} · ${g.items.length}</div>`;
+      else h+=`<div class="slbl">pendente · ${g.items.length}</div>`;
+      g.items.forEach(i=>{h+=iHTML(i,t,false)});
+    });
+  }else{
+    if(pen.length){
+      h+=`<div class="slbl">pendente · ${pen.length}</div>`;
+      pen.forEach(i=>{h+=iHTML(i,t,false)});
+    }
   }
+
   if(don.length){
     h+=`<div class="slbl">concluído · ${don.length}</div>`;
     don.forEach(i=>{h+=iHTML(i,t,true)});
   }
+
+  // Today's todos + overdue
+  const todos=S.data.todos||[];
+  const todayTodos=todos.filter(x=>!x.done&&(x.due===t||(x.due&&x.due<t)));
+  if(todayTodos.length){
+    h+=`<div class="slbl">tarefas${todayTodos.some(x=>x.due<t)?' · ⚠ atrasadas':''}</div>`;
+    todayTodos.forEach(todo=>{
+      const overdue=todo.due&&todo.due<t;
+      h+=`<div class="todo-it">
+        <div class="ck" onclick="togTodo('${todo.id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <div style="flex:1;min-width:0"><div class="todo-text">${esc(todo.text)}</div>
+        ${overdue?`<div class="todo-due overdue">atrasado · ${todo.due}</div>`:''}</div>
+      </div>`;
+    });
+  }
+
   return h;
 }
 
@@ -465,6 +545,8 @@ function iHTML(it,t,dn){
   const s=streak(it);
   const tg=(it.tags||[]).map(t=>tagHTML(t)).join('');
   const time=it.time?`<span class="itime">${it.time}</span>`:'';
+  const periodIcons={morning:'☀',afternoon:'⛅',evening:'🌙'};
+  const pIcon=periodIcons[it.period]?`<span class="period-badge">${periodIcons[it.period]}</span>`:'';
   const skipped=it.skips?.includes(t);
 
   // Mini strip: last 5 due dates before today + today
@@ -502,7 +584,7 @@ function iHTML(it,t,dn){
   return`<div class="it ${dn?'dn':''}">
     <div class="ck" onclick="tog('${it.id}','${t}',event)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>
     <div class="ii">
-      <div class="iname">${time}${esc(it.name)}<span class="rate-pct">${rate}%</span></div>
+      <div class="iname">${pIcon}${time}${esc(it.name)}<span class="rate-pct">${rate}%</span></div>
       <div class="im"><span>${schedLbl(it)}</span>${tg}
         <button class="skip-btn ${skipped?'on':''}" onclick="event.stopPropagation();togSkip('${it.id}','${t}')" title="Pular (não quebra streak)">${skipped?'pulado':'pular'}</button>
       </div>
@@ -511,6 +593,59 @@ function iHTML(it,t,dn){
     ${s>0?`<span class="sk">🔥${s}</span>`:''}
     <button class="be" onclick="oE('${it.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
   </div>`;
+}
+
+// ─── INBOX (personal todos) ─────────────────────────────────
+function rInbox(){
+  const todos=S.data.todos||[];
+  const pending=todos.filter(t=>!t.done);
+  const done=todos.filter(t=>t.done);
+  const t=td();
+
+  let h=`<div class="inbox-input">
+    <input class="fi" id="todo-in" placeholder="O que precisa fazer?" onkeydown="if(event.key==='Enter')addTodo()">
+    <input type="date" class="fi" id="todo-date" style="width:130px;font-family:var(--mono);font-size:.72rem">
+    <button class="inbox-add" onclick="addTodo()">+</button>
+  </div>`;
+
+  if(!todos.length){
+    h+=`<div class="empty" style="padding:30px"><p>Inbox vazio — adicione tarefas pessoais acima.</p></div>`;
+    return h;
+  }
+
+  if(pending.length){
+    h+=`<div class="slbl">pendente · ${pending.length}</div>`;
+    pending.forEach(todo=>{
+      const overdue=todo.due&&todo.due<t;
+      const dueToday=todo.due===t;
+      const tg=(todo.tags||[]).map(t=>tagHTML(t)).join('');
+      h+=`<div class="todo-it">
+        <div class="ck" onclick="togTodo('${todo.id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <div style="flex:1;min-width:0">
+          <div class="todo-text">${esc(todo.text)}</div>
+          <div class="todo-meta">
+            ${todo.due?`<span class="todo-due ${overdue?'overdue':''}" style="${dueToday?'color:var(--g)':''}">${overdue?'atrasado · ':''}${dueToday?'hoje':todo.due}</span>`:''}
+            ${tg}
+          </div>
+        </div>
+        <button class="be" onclick="editTodo('${todo.id}')" title="Editar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="be" onclick="delTodo('${todo.id}')" style="color:var(--r)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>`;
+    });
+  }
+
+  if(done.length){
+    h+=`<div class="slbl">concluído · ${done.length}</div>`;
+    done.forEach(todo=>{
+      h+=`<div class="todo-it todo-dn">
+        <div class="ck" onclick="togTodo('${todo.id}')" style="background:var(--g);border-color:var(--g)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round" style="opacity:1"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <div class="todo-text">${esc(todo.text)}</div>
+      </div>`;
+    });
+    h+=`<button class="clear-done" onclick="clearDoneTodos()">limpar concluídos</button>`;
+  }
+
+  return h;
 }
 
 // ─── WEEK VIEW ──────────────────────────────────────────────
@@ -822,6 +957,16 @@ function rMod(){
       </div>
 
       <div class="fg">
+        <label class="fl">período</label>
+        <div class="fo" id="mpd">
+          <button class="fb ${(!isE||!it?.period||it?.period==='anytime')?'on':''}" onclick="SP('anytime')">qualquer hora</button>
+          <button class="fb ${(isE&&it?.period==='morning')?'on':''}" onclick="SP('morning')">☀ manhã</button>
+          <button class="fb ${(isE&&it?.period==='afternoon')?'on':''}" onclick="SP('afternoon')">⛅ tarde</button>
+          <button class="fb ${(isE&&it?.period==='evening')?'on':''}" onclick="SP('evening')">🌙 noite</button>
+        </div>
+      </div>
+
+      <div class="fg">
         <label class="fl">horário (opcional)</label>
         <input type="time" class="fi fi-time" id="mtime" value="${isE&&it.time?it.time:''}">
       </div>
@@ -852,7 +997,7 @@ function rMod(){
       </div>
     </div>`;
     document.body.appendChild(o);
-    window._m={freq:isE?it.freq:'daily',days:isE?[...(it.days||[])]:[],md:isE?(it.monthDay||1):1};
+    window._m={freq:isE?it.freq:'daily',days:isE?[...(it.days||[])]:[],md:isE?(it.monthDay||1):1,period:isE?(it.period||'anytime'):'anytime'};
     rFD();
     initModalTags(isE?(it.tags||[]):[]);
     setTimeout(()=>document.getElementById('mn')?.focus(),80);
@@ -965,6 +1110,7 @@ window.pickColor=function(tag,color){
 // ═══════════════════════════════════════════════════════════
 window.V=v=>{S.view=v;R()};
 window.TF=t=>{S.tagF=t;R()};
+window.PF=p=>{S.periodF=p;R()};
 
 window.tog=function(id,date,e){
   const it=S.data.items.find(i=>i.id===id);if(!it)return;
@@ -1006,6 +1152,10 @@ window.SF=function(f){
   rFD();
 };
 window.TD=function(d){const m=window._m,i=m.days.indexOf(d);if(i>=0)m.days.splice(i,1);else m.days.push(d);m.days.sort();rFD()};
+window.SP=function(p){
+  window._m.period=p;
+  document.querySelectorAll('#mpd .fb').forEach((b,i)=>b.classList.toggle('on',(p==='anytime'&&i===0)||(p==='morning'&&i===1)||(p==='afternoon'&&i===2)||(p==='evening'&&i===3)));
+};
 
 window.sM=function(){
   const name=document.getElementById('mn')?.value.trim();if(!name)return;
@@ -1024,6 +1174,7 @@ window.sM=function(){
       id:uid(),name,freq:m.freq,
       days:m.freq==='weekly'?m.days:undefined,
       monthDay:m.freq==='monthly'?(m.md||1):undefined,
+      period:m.period!=='anytime'?m.period:undefined,
       tags:tags.length?tags:undefined,
       time:time||undefined,
       reminder:reminder||undefined,
@@ -1036,6 +1187,7 @@ window.sM=function(){
       it.name=name;it.freq=m.freq;
       it.days=m.freq==='weekly'?m.days:undefined;
       it.monthDay=m.freq==='monthly'?(m.md||1):undefined;
+      it.period=m.period!=='anytime'?m.period:undefined;
       it.tags=tags.length?tags:undefined;
       it.time=time||undefined;
       it.reminder=reminder||undefined;
@@ -1052,22 +1204,69 @@ window.xD=function(){
 
 // Reorder
 window.moveUp=function(id){
-  const items=sortedItems(S.data.items);
+  normalizeOrders();
+  const items=sortedItems(S.data.items.filter(i=>!i.archived));
   const idx=items.findIndex(i=>i.id===id);
   if(idx<=0)return;
-  // Swap order values
-  const cur=items[idx],prev=items[idx-1];
-  const co=cur.order??idx,po=prev.order??(idx-1);
-  cur.order=po;prev.order=co;
+  const tmp=items[idx].order;
+  items[idx].order=items[idx-1].order;
+  items[idx-1].order=tmp;
   push(S.data);R();
 };
 window.moveDown=function(id){
-  const items=sortedItems(S.data.items);
+  normalizeOrders();
+  const items=sortedItems(S.data.items.filter(i=>!i.archived));
   const idx=items.findIndex(i=>i.id===id);
   if(idx>=items.length-1)return;
-  const cur=items[idx],next=items[idx+1];
-  const co=cur.order??idx,no=next.order??(idx+1);
-  cur.order=no;next.order=co;
+  const tmp=items[idx].order;
+  items[idx].order=items[idx+1].order;
+  items[idx+1].order=tmp;
+  push(S.data);R();
+};
+function normalizeOrders(){
+  const items=sortedItems(S.data.items.filter(i=>!i.archived));
+  items.forEach((it,i)=>{it.order=i});
+}
+
+// ═══════════════════════════════════════════════════════════
+// INBOX ACTIONS
+// ═══════════════════════════════════════════════════════════
+window.addTodo=function(){
+  const input=document.getElementById('todo-in');
+  const dateIn=document.getElementById('todo-date');
+  if(!input)return;
+  const text=input.value.trim();if(!text)return;
+  const due=dateIn?.value||undefined;
+  if(!S.data.todos)S.data.todos=[];
+  S.data.todos.push({id:uid(),text,due,done:false,created:td()});
+  push(S.data);R();
+  // Re-focus input after render
+  setTimeout(()=>{const i=document.getElementById('todo-in');if(i){i.value='';i.focus()}},50);
+};
+
+window.togTodo=function(id){
+  const todo=(S.data.todos||[]).find(t=>t.id===id);if(!todo)return;
+  todo.done=!todo.done;
+  if(todo.done)todo.doneDate=td();
+  push(S.data);R();
+};
+
+window.delTodo=function(id){
+  S.data.todos=(S.data.todos||[]).filter(t=>t.id!==id);
+  push(S.data);R();
+};
+
+window.editTodo=function(id){
+  const todo=(S.data.todos||[]).find(t=>t.id===id);if(!todo)return;
+  const newText=prompt('Editar tarefa:',todo.text);
+  if(newText!==null&&newText.trim()){
+    todo.text=newText.trim();
+    push(S.data);R();
+  }
+};
+
+window.clearDoneTodos=function(){
+  S.data.todos=(S.data.todos||[]).filter(t=>!t.done);
   push(S.data);R();
 };
 
@@ -1078,6 +1277,7 @@ window.moveDown=function(id){
   initFB();
   S.data=getL();
   if(!S.data.tagColors)S.data.tagColors={};
+  if(!S.data.todos)S.data.todos=[];
   R();
 
   // PWA Service Worker
