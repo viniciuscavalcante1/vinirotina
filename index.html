@@ -246,6 +246,47 @@ button{font-family:var(--font);cursor:pointer}input,select{font-family:var(--fon
 .rem-toggle::after{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;left:2px;transition:transform .15s}
 .rem-toggle.on::after{transform:translateX(16px)}
 
+/* priority */
+.it.pri-high{border-left:3px solid var(--r)}
+.it.pri-med{border-left:3px solid var(--o)}
+.it.pri-low{border-left:3px solid var(--b2)}
+.todo-it.pri-high{border-left:3px solid var(--r)}
+.todo-it.pri-med{border-left:3px solid var(--o)}
+.pri-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* level bar */
+.lvl-bar{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 14px;background:var(--s1);border:1px solid var(--b1);border-radius:var(--rad)}
+.lvl-num{font-family:var(--mono);font-size:1.1rem;font-weight:700;color:var(--g);min-width:50px}
+.lvl-track{flex:1;height:6px;background:var(--s3);border-radius:3px;overflow:hidden}
+.lvl-fill{height:100%;background:var(--g);border-radius:3px;transition:width .3s}
+.lvl-xp{font-family:var(--mono);font-size:.55rem;color:var(--t3)}
+
+/* all-time stats */
+.at-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:14px}
+.at-card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--rad);padding:12px}
+.at-val{font-family:var(--mono);font-size:1.2rem;font-weight:700;color:var(--t1)}
+.at-lbl{font-family:var(--mono);font-size:.55rem;color:var(--t3);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+
+/* badges */
+.badge-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.badge{width:56px;height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--s1);border:1px solid var(--b1);border-radius:var(--rad);gap:2px;transition:all .15s}
+.badge.earned{border-color:var(--g);background:var(--gd)}
+.badge.locked{opacity:.25;filter:grayscale(1)}
+.badge-icon{font-size:1.2rem}
+.badge-lbl{font-family:var(--mono);font-size:.45rem;color:var(--t3);text-align:center}
+.badge.earned .badge-lbl{color:var(--g)}
+
+/* tab transitions */
+.view-area{animation:viewIn .2s ease}
+@keyframes viewIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* collapsible sections */
+.slbl[data-key]{cursor:pointer;user-select:none}
+.slbl[data-key]::before{content:'▾';font-size:.55rem;transition:transform .15s;display:inline-block;margin-right:3px}
+.slbl[data-key].collapsed::before{transform:rotate(-90deg)}
+.section-body{overflow:hidden;transition:max-height .2s ease;max-height:2000px}
+.section-body.collapsed{max-height:0}
+
 @media(max-width:380px){.db{width:28px;height:28px;font-size:.58rem}.hx{width:11px;height:11px}}
 
 /* lock screen */
@@ -466,6 +507,115 @@ function requestNotifPerm(){
 // ═══════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// LEVEL SYSTEM
+// ═══════════════════════════════════════════════════════════
+function calcXP(data){
+  const items=data.items||[];
+  let xp=0;
+  // 1 XP per check
+  items.forEach(i=>xp+=(i.checks||[]).length);
+  // 5 XP per active streak day
+  items.forEach(i=>xp+=streak(i)*5);
+  // 50 XP per milestone earned
+  xp+=Object.keys(data.milestones||{}).length*50;
+  return xp;
+}
+function xpForLevel(lvl){return Math.floor(50*Math.pow(lvl,1.5))}
+function getLevel(xp){
+  let lvl=1;
+  while(xpForLevel(lvl+1)<=xp)lvl++;
+  return lvl;
+}
+function levelHTML(data){
+  const xp=calcXP(data);
+  const lvl=getLevel(xp);
+  const cur=xpForLevel(lvl);
+  const next=xpForLevel(lvl+1);
+  const pct=Math.min(100,Math.round((xp-cur)/(next-cur)*100));
+  return`<div class="lvl-bar"><div class="lvl-num">Lv ${lvl}</div><div class="lvl-track"><div class="lvl-fill" style="width:${pct}%"></div></div><div class="lvl-xp">${xp} xp</div></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// ALL-TIME STATS
+// ═══════════════════════════════════════════════════════════
+function allTimeHTML(data){
+  const items=data.items||[];
+  const totalChecks=items.reduce((s,i)=>s+(i.checks||[]).length,0);
+  const allDates=new Set();items.forEach(i=>(i.checks||[]).forEach(c=>allDates.add(c)));
+  const daysActive=allDates.size;
+  const bestS=items.length?Math.max(...items.map(i=>bestStreak(i))):0;
+  // Perfect days
+  let perfect=0;
+  allDates.forEach(d=>{
+    const due=items.filter(i=>isDue(i,d)&&!i.archived);
+    const done=due.filter(i=>i.checks?.includes(d));
+    if(due.length>0&&done.length===due.length)perfect++;
+  });
+  return`<div class="at-grid">
+    <div class="at-card"><div class="at-val">${totalChecks}</div><div class="at-lbl">checks total</div></div>
+    <div class="at-card"><div class="at-val">${daysActive}</div><div class="at-lbl">dias ativos</div></div>
+    <div class="at-card"><div class="at-val">${bestS}d</div><div class="at-lbl">melhor streak</div></div>
+    <div class="at-card"><div class="at-val">${perfect}</div><div class="at-lbl">dias perfeitos</div></div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// BADGES
+// ═══════════════════════════════════════════════════════════
+const ALL_BADGES=[
+  {id:'s7',icon:'⭐',lbl:'7d streak',check:d=>d.items?.some(i=>bestStreak(i)>=7)},
+  {id:'s14',icon:'🌟',lbl:'14d streak',check:d=>d.items?.some(i=>bestStreak(i)>=14)},
+  {id:'s30',icon:'🏆',lbl:'30d streak',check:d=>d.items?.some(i=>bestStreak(i)>=30)},
+  {id:'s60',icon:'🔥',lbl:'60d streak',check:d=>d.items?.some(i=>bestStreak(i)>=60)},
+  {id:'s90',icon:'💎',lbl:'90d streak',check:d=>d.items?.some(i=>bestStreak(i)>=90)},
+  {id:'s180',icon:'👑',lbl:'180d streak',check:d=>d.items?.some(i=>bestStreak(i)>=180)},
+  {id:'s365',icon:'🏅',lbl:'1 ano!',check:d=>d.items?.some(i=>bestStreak(i)>=365)},
+  {id:'c100',icon:'💯',lbl:'100 checks',check:d=>(d.items||[]).reduce((s,i)=>s+(i.checks||[]).length,0)>=100},
+  {id:'c500',icon:'🚀',lbl:'500 checks',check:d=>(d.items||[]).reduce((s,i)=>s+(i.checks||[]).length,0)>=500},
+  {id:'c1k',icon:'⚡',lbl:'1k checks',check:d=>(d.items||[]).reduce((s,i)=>s+(i.checks||[]).length,0)>=1000},
+  {id:'h5',icon:'📋',lbl:'5 hábitos',check:d=>(d.items||[]).filter(i=>!i.archived).length>=5},
+  {id:'h10',icon:'📚',lbl:'10 hábitos',check:d=>(d.items||[]).filter(i=>!i.archived).length>=10},
+  {id:'p7',icon:'✨',lbl:'7 dias perfeitos',check:d=>{let p=0;const items=d.items||[];const dates=new Set();items.forEach(i=>(i.checks||[]).forEach(c=>dates.add(c)));dates.forEach(dt=>{const due=items.filter(i=>isDue(i,dt)&&!i.archived);const done=due.filter(i=>i.checks?.includes(dt));if(due.length>0&&done.length===due.length)p++});return p>=7}},
+  {id:'lv5',icon:'🎯',lbl:'Level 5',check:d=>getLevel(calcXP(d))>=5},
+  {id:'lv10',icon:'🎖',lbl:'Level 10',check:d=>getLevel(calcXP(d))>=10},
+  {id:'lv20',icon:'🏰',lbl:'Level 20',check:d=>getLevel(calcXP(d))>=20},
+];
+
+function badgesHTML(data){
+  let h=`<div class="badge-grid">`;
+  ALL_BADGES.forEach(b=>{
+    const earned=b.check(data);
+    h+=`<div class="badge ${earned?'earned':'locked'}" title="${b.lbl}"><div class="badge-icon">${b.icon}</div><div class="badge-lbl">${b.lbl}</div></div>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+
+// ═══════════════════════════════════════════════════════════
+// DYNAMIC FAVICON
+// ═══════════════════════════════════════════════════════════
+function updateFavicon(pct){
+  const color=pct>=100?'%234ADE80':pct>=50?'%23FBBF24':'%23F87171';
+  const fill=pct>=100?'%234ADE80':'%23555550';
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='none' stroke='%23333' stroke-width='8'/><circle cx='50' cy='50' r='45' fill='none' stroke='${color}' stroke-width='8' stroke-dasharray='${pct*2.83} 283' stroke-linecap='round' transform='rotate(-90 50 50)'/><text x='50' y='58' font-size='32' text-anchor='middle' fill='${color}' font-family='sans-serif' font-weight='bold'>${pct}</text></svg>`;
+  let link=document.querySelector("link[rel~='icon']");
+  if(!link){link=document.createElement('link');link.rel='icon';document.head.appendChild(link)}
+  link.href='data:image/svg+xml,'+svg;
+}
+
+// ═══════════════════════════════════════════════════════════
+// COLLAPSIBLE SECTIONS
+// ═══════════════════════════════════════════════════════════
+let collapsedSections={};
+window.toggleSection=function(key){
+  collapsedSections[key]=!collapsedSections[key];
+  const lbl=document.querySelector(`.slbl[data-key="${key}"]`);
+  const body=document.querySelector(`.section-body[data-key="${key}"]`);
+  if(lbl)lbl.classList.toggle('collapsed');
+  if(body)body.classList.toggle('collapsed');
+};
+
 let S={data:{items:[],tagColors:{},todos:[]},view:'today',modal:null,edit:null,tagF:null,periodF:null,heatItem:'all',weekOff:0,monthOff:0};
 
 // ═══════════════════════════════════════════════════════════
@@ -507,6 +657,9 @@ function R(){
     h+=`</div>`;
   }
 
+  h+=levelHTML(S.data);
+  h+=`<div class="view-area">`;
+
   if(S.view==='today')h+=rToday(t,sorted);
   else if(S.view==='inbox')h+=rInbox();
   else if(S.view==='week')h+=rWeek(t,sorted);
@@ -515,9 +668,14 @@ function R(){
   else if(S.view==='streaks')h+=rStreaks(sorted);
   else h+=rAll(sorted, sortedItems((S.tagF?items.filter(i=>(i.tags||[]).includes(S.tagF)):items).filter(i=>i.archived)));
 
-  h+=`</div>`;
+  h+=`</div></div>`;
   root.innerHTML=h;
   if(S.modal)rMod();
+
+  // Dynamic favicon
+  const fDue=active.filter(i=>isDue(i,t));
+  const fDone=fDue.filter(i=>i.checks?.includes(t)).length;
+  updateFavicon(fDue.length?Math.round(fDone/fDue.length*100):0);
 }
 
 // ─── MILESTONES ─────────────────────────────────────────────
@@ -609,20 +767,28 @@ function rToday(t,items){
 
     groups.forEach(g=>{
       if(!g.items.length)return;
-      if(hasMultiple)h+=`<div class="slbl">${g.lbl} · ${g.items.length}</div>`;
-      else h+=`<div class="slbl">pendente · ${g.items.length}</div>`;
+      const lbl=hasMultiple?`${g.lbl} · ${g.items.length}`:`pendente · ${g.items.length}`;
+      const col=collapsedSections[g.k]?'collapsed':'';
+      h+=`<div class="slbl ${col}" data-key="${g.k}" onclick="toggleSection('${g.k}')">${lbl}</div>`;
+      h+=`<div class="section-body ${col}" data-key="${g.k}">`;
       g.items.forEach(i=>{h+=iHTML(i,t,false)});
+      h+=`</div>`;
     });
   }else{
     if(pen.length){
-      h+=`<div class="slbl">pendente · ${pen.length}</div>`;
+      h+=`<div class="slbl" onclick="toggleSection('pen')" data-key="pen" class="${collapsedSections.pen?'collapsed':''}">pendente · ${pen.length}</div>`;
+      h+=`<div class="section-body ${collapsedSections.pen?'collapsed':''}" data-key="pen">`;
       pen.forEach(i=>{h+=iHTML(i,t,false)});
+      h+=`</div>`;
     }
   }
 
   if(don.length){
-    h+=`<div class="slbl">concluído · ${don.length}</div>`;
+    const col=collapsedSections.done?'collapsed':'';
+    h+=`<div class="slbl ${col}" data-key="done" onclick="toggleSection('done')">concluído · ${don.length}</div>`;
+    h+=`<div class="section-body ${col}" data-key="done">`;
     don.forEach(i=>{h+=iHTML(i,t,true)});
+    h+=`</div>`;
   }
 
   // Today's todos + overdue
@@ -683,7 +849,9 @@ function iHTML(it,t,dn){
   }
   const rate=due30?Math.round(done30/due30*100):0;
 
-  return`<div class="it ${dn?'dn':''}">
+  const priCls=it.priority==='high'?' pri-high':it.priority==='med'?' pri-med':it.priority==='low'?' pri-low':'';
+
+  return`<div class="it ${dn?'dn':''}${priCls}">
     <div class="ck" onclick="tog('${it.id}','${t}',event)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>
     <div class="ii">
       <div class="iname">${pIcon}${time}${esc(it.name)}<span class="rate-pct">${rate}%</span></div>
@@ -700,13 +868,17 @@ function iHTML(it,t,dn){
 // ─── INBOX (personal todos) ─────────────────────────────────
 function rInbox(){
   const todos=S.data.todos||[];
-  const pending=todos.filter(t=>!t.done);
+  const pending=todos.filter(t=>!t.done).sort((a,b)=>{
+    const po={high:0,med:1,low:2};
+    return(po[a.priority]??3)-(po[b.priority]??3);
+  });
   const done=todos.filter(t=>t.done);
   const t=td();
 
   let h=`<div class="inbox-input">
     <input class="fi" id="todo-in" placeholder="O que precisa fazer?" onkeydown="if(event.key==='Enter')addTodo()">
     <input type="date" class="fi" id="todo-date" style="width:130px;font-family:var(--mono);font-size:.72rem">
+    <select class="fi" id="todo-pri" style="width:70px;font-size:.68rem;padding:6px"><option value="">—</option><option value="low">baixa</option><option value="med">média</option><option value="high">alta</option></select>
     <button class="inbox-add" onclick="addTodo()">+</button>
   </div>`;
 
@@ -721,7 +893,8 @@ function rInbox(){
       const overdue=todo.due&&todo.due<t;
       const dueToday=todo.due===t;
       const tg=(todo.tags||[]).map(t=>tagHTML(t)).join('');
-      h+=`<div class="todo-it">
+      const priCls=todo.priority==='high'?' pri-high':todo.priority==='med'?' pri-med':'';
+      h+=`<div class="todo-it${priCls}">
         <div class="ck" onclick="togTodo('${todo.id}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>
         <div style="flex:1;min-width:0">
           <div class="todo-text">${esc(todo.text)}</div>
@@ -989,6 +1162,15 @@ function rStreaks(items){
     </div>`;
   }
   h+=`</div></div>`;
+
+  // All-time stats
+  h+=`<div class="slbl">all-time</div>`;
+  h+=allTimeHTML(S.data);
+
+  // Badges
+  h+=`<div class="slbl">conquistas</div>`;
+  h+=badgesHTML(S.data);
+
   return h;
 }
 
@@ -1068,6 +1250,16 @@ function rMod(){
       </div>
 
       <div class="fg">
+        <label class="fl">prioridade</label>
+        <div class="fo" id="mpri">
+          <button class="fb ${(!isE||!it?.priority)?'on':''}" onclick="SPR(null)">nenhuma</button>
+          <button class="fb ${(isE&&it?.priority==='low')?'on':''}" onclick="SPR('low')">baixa</button>
+          <button class="fb ${(isE&&it?.priority==='med')?'on':''}" onclick="SPR('med')">média</button>
+          <button class="fb ${(isE&&it?.priority==='high')?'on':''}" onclick="SPR('high')">🔴 alta</button>
+        </div>
+      </div>
+
+      <div class="fg">
         <label class="fl">horário (opcional)</label>
         <input type="time" class="fi fi-time" id="mtime" value="${isE&&it.time?it.time:''}">
       </div>
@@ -1098,7 +1290,7 @@ function rMod(){
       </div>
     </div>`;
     document.body.appendChild(o);
-    window._m={freq:isE?it.freq:'daily',days:isE?[...(it.days||[])]:[],md:isE?(it.monthDay||1):1,period:isE?(it.period||'anytime'):'anytime'};
+    window._m={freq:isE?it.freq:'daily',days:isE?[...(it.days||[])]:[],md:isE?(it.monthDay||1):1,period:isE?(it.period||'anytime'):'anytime',priority:isE?(it.priority||null):null};
     rFD();
     initModalTags(isE?(it.tags||[]):[]);
     setTimeout(()=>document.getElementById('mn')?.focus(),80);
@@ -1258,6 +1450,10 @@ window.SP=function(p){
   window._m.period=p;
   document.querySelectorAll('#mpd .fb').forEach((b,i)=>b.classList.toggle('on',(p==='anytime'&&i===0)||(p==='morning'&&i===1)||(p==='afternoon'&&i===2)||(p==='evening'&&i===3)));
 };
+window.SPR=function(p){
+  window._m.priority=p;
+  document.querySelectorAll('#mpri .fb').forEach((b,i)=>b.classList.toggle('on',(!p&&i===0)||(p==='low'&&i===1)||(p==='med'&&i===2)||(p==='high'&&i===3)));
+};
 
 window.sM=function(){
   const name=document.getElementById('mn')?.value.trim();if(!name)return;
@@ -1277,6 +1473,7 @@ window.sM=function(){
       days:m.freq==='weekly'?m.days:undefined,
       monthDay:m.freq==='monthly'?(m.md||1):undefined,
       period:m.period!=='anytime'?m.period:undefined,
+      priority:m.priority||undefined,
       tags:tags.length?tags:undefined,
       time:time||undefined,
       reminder:reminder||undefined,
@@ -1290,6 +1487,7 @@ window.sM=function(){
       it.days=m.freq==='weekly'?m.days:undefined;
       it.monthDay=m.freq==='monthly'?(m.md||1):undefined;
       it.period=m.period!=='anytime'?m.period:undefined;
+      it.priority=m.priority||undefined;
       it.tags=tags.length?tags:undefined;
       it.time=time||undefined;
       it.reminder=reminder||undefined;
@@ -1417,13 +1615,14 @@ function normalizeOrders(){
 window.addTodo=function(){
   const input=document.getElementById('todo-in');
   const dateIn=document.getElementById('todo-date');
+  const priIn=document.getElementById('todo-pri');
   if(!input)return;
   const text=input.value.trim();if(!text)return;
   const due=dateIn?.value||undefined;
+  const priority=priIn?.value||undefined;
   if(!S.data.todos)S.data.todos=[];
-  S.data.todos.push({id:uid(),text,due,done:false,created:td()});
+  S.data.todos.push({id:uid(),text,due,priority,done:false,created:td()});
   push(S.data);R();
-  // Re-focus input after render
   setTimeout(()=>{const i=document.getElementById('todo-in');if(i){i.value='';i.focus()}},50);
 };
 
