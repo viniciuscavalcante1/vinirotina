@@ -236,6 +236,23 @@ button{font-family:var(--font);cursor:pointer}input,select{font-family:var(--fon
 .rem-toggle.on::after{transform:translateX(16px)}
 
 @media(max-width:380px){.db{width:28px;height:28px;font-size:.58rem}.hx{width:11px;height:11px}}
+
+/* lock screen */
+.lock{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:20px}
+.lock h1{font-family:var(--mono);font-size:1.6rem;font-weight:700;margin-bottom:6px}
+.lock p{color:var(--t3);font-size:.82rem;margin-bottom:28px}
+.lock-dots{display:flex;gap:12px;margin-bottom:24px}
+.lock-dot{width:14px;height:14px;border-radius:50%;background:var(--s3);transition:all .2s}
+.lock-dot.filled{background:var(--g)}
+.lock-dot.wrong{background:var(--r);animation:shake .3s}
+.lock-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:240px}
+.lock-key{width:68px;height:68px;border-radius:50%;border:1px solid var(--b1);background:var(--s1);color:var(--t1);font-family:var(--mono);font-size:1.2rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .1s}
+.lock-key:hover{background:var(--s2)}.lock-key:active{background:var(--s3);transform:scale(.95)}
+.lock-key.empty{border:none;background:none;cursor:default}
+.lock-key.empty:hover{background:none}
+.lock-sub{font-family:var(--mono);font-size:.58rem;color:var(--t3);margin-top:20px;cursor:pointer;background:0;border:0;padding:4px 8px}
+.lock-sub:hover{color:var(--t2)}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 </style>
 </head>
 <body>
@@ -415,6 +432,9 @@ let S={data:{items:[],tagColors:{},todos:[]},view:'today',modal:null,edit:null,t
 // RENDER
 // ═══════════════════════════════════════════════════════════
 function R(){
+  // Lock check
+  if(S.data.pin&&sessionStorage.getItem('rotina_unlocked')!=='1'){rLock();return}
+
   const root=document.getElementById('root');
   const t=td(),now=new Date();
   const dl=now.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
@@ -430,7 +450,7 @@ function R(){
   document.title=pendToday>0?`(${pendToday}) Rotina`:'◉ Rotina';
 
   let h=`<div class="app"><div class="hdr"><div><h1>◉ rotina</h1><div class="hdr-sub">${dl}</div></div>
-  <div class="hdr-r"><button class="btn-s" onclick="csv()">csv ↓</button><button class="btn-s btn-g" onclick="oA()">+ novo</button></div></div>
+  <div class="hdr-r"><button class="btn-s" onclick="csv()">csv ↓</button>${S.data.pin?`<button class="btn-s" onclick="lockApp()" title="Trancar">🔒</button>`:`<button class="btn-s" onclick="setupPin()" title="Criar PIN">🔓</button>`}<button class="btn-s btn-g" onclick="oA()">+ novo</button></div></div>
   <div class="tabs">
     <button class="tab ${S.view==='today'?'on':''}" onclick="V('today')">hoje</button>
     <button class="tab ${S.view==='inbox'?'on':''}" onclick="V('inbox')">inbox</button>
@@ -1271,6 +1291,93 @@ window.clearDoneTodos=function(){
 };
 
 // ═══════════════════════════════════════════════════════════
+// LOCK SCREEN
+// ═══════════════════════════════════════════════════════════
+function simpleHash(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0}return'h'+h}
+
+let lockInput='';
+let lockMode='unlock'; // unlock | create | confirm
+let lockFirst='';
+let lockError=false;
+
+function rLock(){
+  const hasPin=S.data.pin;
+  if(!hasPin)lockMode='create';
+  const title={create:'Criar PIN',confirm:'Confirmar PIN',unlock:'◉'}[lockMode];
+  const sub={create:'Escolha um PIN de 4 dígitos',confirm:'Digite novamente pra confirmar',unlock:''}[lockMode];
+  const dots=[0,1,2,3].map(i=>`<div class="lock-dot ${i<lockInput.length?'filled':''} ${lockError?'wrong':''}"></div>`).join('');
+  const keys=[1,2,3,4,5,6,7,8,9,'',0,'⌫'];
+
+  let h=`<div class="lock"><h1>${title}</h1><p>${sub}</p><div class="lock-dots">${dots}</div><div class="lock-pad">`;
+  keys.forEach(k=>{
+    if(k==='')h+=`<div class="lock-key empty"></div>`;
+    else if(k==='⌫')h+=`<button class="lock-key" onclick="lockDel()">⌫</button>`;
+    else h+=`<button class="lock-key" onclick="lockKey('${k}')">${k}</button>`;
+  });
+  h+=`</div>`;
+  if(hasPin)h+=`<button class="lock-sub" onclick="removePinPrompt()">remover pin</button>`;
+  h+=`</div>`;
+  document.getElementById('root').innerHTML=h;
+}
+
+window.lockKey=function(k){
+  if(lockInput.length>=4)return;
+  lockError=false;
+  lockInput+=k;
+  rLock();
+  if(lockInput.length===4)setTimeout(checkLock,200);
+};
+
+window.lockDel=function(){
+  lockInput=lockInput.slice(0,-1);lockError=false;rLock();
+};
+
+function checkLock(){
+  if(lockMode==='create'){
+    lockFirst=lockInput;lockInput='';lockMode='confirm';rLock();
+  }else if(lockMode==='confirm'){
+    if(lockInput===lockFirst){
+      S.data.pin=simpleHash(lockInput);
+      push(S.data);
+      sessionStorage.setItem('rotina_unlocked','1');
+      lockInput='';R();
+    }else{
+      lockError=true;lockInput='';lockMode='create';lockFirst='';rLock();
+    }
+  }else{
+    if(simpleHash(lockInput)===S.data.pin){
+      sessionStorage.setItem('rotina_unlocked','1');
+      lockInput='';R();
+    }else{
+      lockError=true;lockInput='';rLock();
+    }
+  }
+}
+
+window.removePinPrompt=function(){
+  lockMode='unlock';
+  const pin=prompt('Digite o PIN atual pra remover:');
+  if(pin&&simpleHash(pin)===S.data.pin){
+    delete S.data.pin;push(S.data);
+    sessionStorage.setItem('rotina_unlocked','1');
+    R();
+  }else if(pin){
+    alert('PIN incorreto.');
+  }
+};
+
+window.lockApp=function(){
+  sessionStorage.removeItem('rotina_unlocked');
+  lockInput='';lockMode='unlock';lockError=false;
+  rLock();
+};
+
+window.setupPin=function(){
+  lockInput='';lockMode='create';lockFirst='';lockError=false;
+  rLock();
+};
+
+// ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 (()=>{
@@ -1278,7 +1385,13 @@ window.clearDoneTodos=function(){
   S.data=getL();
   if(!S.data.tagColors)S.data.tagColors={};
   if(!S.data.todos)S.data.todos=[];
-  R();
+
+  // Check lock
+  if(S.data.pin&&sessionStorage.getItem('rotina_unlocked')!=='1'){
+    rLock();
+  }else{
+    R();
+  }
 
   // PWA Service Worker
   if('serviceWorker'in navigator){
